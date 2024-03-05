@@ -1,6 +1,4 @@
 use clocktower_rs::{establish_connection, create_worktime_entry};
-use clocktower_rs::models::*;
-use std::io::{stdin, Read};
 use chrono::prelude::*;
 
 fn main() {
