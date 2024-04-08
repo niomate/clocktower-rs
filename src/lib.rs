@@ -18,12 +18,14 @@ pub fn establish_connection() -> PgConnection {
 
 pub fn create_worktime_entry(
     conn: &mut PgConnection,
+    date: Option<NaiveDate>,
     start_time: Option<NaiveDateTime>,
     end_time: Option<NaiveDateTime>,
 ) -> WorktimeEntry {
     use crate::schema::worktime_entries;
 
     let new_entry = NewEntry {
+        date: date.unwrap_or_else(|| Utc::now().date_naive()),
         start_time: start_time.unwrap_or_else(|| Utc::now().naive_local()),
         end_time,
         finished: end_time.is_some(),
