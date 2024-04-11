@@ -1,17 +1,30 @@
 use chrono::prelude::*;
 use diesel::prelude::*;
+use tabled::Tabled;
 
-#[derive(Queryable, Selectable)]
+#[derive(Queryable, Selectable, Debug, Tabled)]
 #[diesel(table_name = crate::schema::worktime_entries)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
-#[derive(Debug)]
 pub struct WorktimeEntry {
     pub id: i32,
     pub day: NaiveDate,
+    #[tabled(display_with = "display_datetime")]
     pub start_time: NaiveDateTime,
+    #[tabled(display_with = "display_option")]
     pub end_time: Option<NaiveDateTime>,
     pub finished: bool,
     pub hadbreak: bool,
+}
+
+fn display_option(o: &Option<NaiveDateTime>) -> String {
+    match o {
+        Some(s) => display_datetime(s),
+        None => format!("--:--"),
+    }
+}
+
+fn display_datetime(s: &NaiveDateTime) -> String {
+    format!("{}", s.format("%H:%Mh"))
 }
 
 #[derive(Insertable)]

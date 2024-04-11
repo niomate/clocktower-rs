@@ -23,7 +23,7 @@ pub fn create_worktime_entry(
     start_time: Option<NaiveDateTime>,
     end_time: Option<NaiveDateTime>,
     hadbreak: bool,
-) -> Result<WorktimeEntry> {
+) -> Result<bool> {
     use crate::schema::worktime_entries;
 
     let new_entry = NewEntry {
@@ -36,8 +36,8 @@ pub fn create_worktime_entry(
 
     diesel::insert_into(worktime_entries::table)
         .values(&new_entry)
-        .returning(WorktimeEntry::as_returning())
-        .get_result(conn)
+        .execute(conn)
+        .map(|nrows| nrows == 1 as usize)
         .map_err(|err| err.into())
 }
 
@@ -45,7 +45,7 @@ pub fn set_workday_finished(
     conn: &mut PgConnection,
     date: NaiveDate,
     _hadbreak: bool,
-) -> Result<usize> {
+) -> Result<bool> {
     use self::schema::worktime_entries::dsl::{day, finished, worktime_entries};
 
     let now = Local::now();
@@ -54,11 +54,8 @@ pub fn set_workday_finished(
     diesel::update(worktime_entries)
         .filter(day.eq(date))
         .filter(finished.eq(false))
-        .set(
-            &models::UpdateEntry::new()
-                .finished_at(end_time)
-                .done(),
-        )
+        .set(&models::UpdateEntry::new().finished_at(end_time).done())
         .execute(conn)
+        .map(|nrows| nrows == 1 as usize)
         .map_err(|err| err.into())
 }

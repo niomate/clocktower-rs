@@ -1,8 +1,7 @@
 use chrono::prelude::*;
-use clocktower_rs::{create_worktime_entry, establish_connection};
-use diesel::dsl::now;
+use clocktower_core::{create_worktime_entry, establish_connection};
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let connection = &mut establish_connection();
 
     let entry = create_worktime_entry(
@@ -11,7 +10,9 @@ fn main() {
         Some(Local::now().naive_local()),
         None,
         false,
-    );
+    )?;
 
-    println!("Saved draft entry {:?} with id {}", entry, entry.id)
+    println!("Saved draft entry {:?} with id {}", entry, entry.id);
+
+    Ok(())
 }
