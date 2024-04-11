@@ -40,12 +40,14 @@ pub struct NewEntry {
 #[derive(AsChangeset)]
 #[diesel(table_name = crate::schema::worktime_entries)]
 pub struct UpdateEntry {
+    pub start_time: Option<NaiveDateTime>,
     pub end_time: Option<NaiveDateTime>,
     pub finished: Option<bool>,
     pub hadbreak: Option<bool>,
 }
 
 pub struct UpdateEntryBuilder {
+    _start_time: Option<NaiveDateTime>,
     _end_time: Option<NaiveDateTime>,
     _finished: Option<bool>,
     _hadbreak: Option<bool>,
@@ -54,6 +56,7 @@ pub struct UpdateEntryBuilder {
 impl UpdateEntry {
     pub fn new() -> UpdateEntryBuilder {
         UpdateEntryBuilder {
+            _start_time: None,
             _end_time: None,
             _finished: None,
             _hadbreak: None,
@@ -62,6 +65,10 @@ impl UpdateEntry {
 }
 
 impl UpdateEntryBuilder {
+    pub fn start_time(&mut self, date: NaiveDateTime) -> &mut Self {
+        self._start_time = Some(date);
+        self
+    }
     pub fn end_time(&mut self, date: NaiveDateTime) -> &mut Self {
         self._end_time = Some(date);
         self
@@ -81,6 +88,7 @@ impl UpdateEntryBuilder {
     }
     pub fn done(&self) -> UpdateEntry {
         UpdateEntry {
+            start_time: self._start_time,
             end_time: self._end_time,
             finished: self._finished,
             hadbreak: self._hadbreak,

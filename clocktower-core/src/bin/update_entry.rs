@@ -1,6 +1,6 @@
 use crate::models::UpdateEntry;
 use chrono::prelude::*;
-use clocktower_rs::*;
+use clocktower_core::*;
 use diesel::prelude::*;
 
 fn main() {
