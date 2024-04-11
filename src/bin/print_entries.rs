@@ -8,7 +8,6 @@ fn main() {
     let connection = &mut establish_connection();
 
     let results = worktime_entries
-        .filter(finished.eq(true))
         .limit(5)
         .select(WorktimeEntry::as_select())
         .load(connection)
