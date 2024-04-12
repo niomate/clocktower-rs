@@ -2,11 +2,11 @@ use chrono::{NaiveDate, NaiveDateTime};
 use clap::{Parser, Subcommand};
 use clocktower_core::*;
 
-fn parse_date(date_string: String) -> anyhow::Result<NaiveDate> {
+fn parse_date(date_string: &str) -> anyhow::Result<NaiveDate> {
     parse_datetime(date_string).map(|date| date.date())
 }
 
-fn parse_datetime(date_string: String) -> anyhow::Result<NaiveDateTime> {
+fn parse_datetime(date_string: &str) -> anyhow::Result<NaiveDateTime> {
     chrono_english::parse_date_string(
         &date_string,
         chrono::Local::now(),
@@ -31,44 +31,50 @@ enum Commands {
         #[clap(short = 'b', long)]
         hadbreak: bool,
     },
+    StartAt {
+        #[arg(value_parser = parse_datetime)]
+        start_time: NaiveDateTime,
+    },
+    EndAt {
+        #[arg(value_parser = parse_datetime)]
+        end_time: NaiveDateTime,
+        #[clap(short = 'b', long)]
+        hadbreak: bool,
+    },
     UpdateStart {
-        #[arg(value_parser = |arg0: &str| parse_date(arg0.to_string()))]
+        #[arg(value_parser = parse_date)]
         date: NaiveDate,
-        #[arg(value_parser = |arg0: &str| parse_datetime(arg0.to_string()))]
+        #[arg(value_parser = parse_datetime)]
         start_time: NaiveDateTime,
     },
     UpdateEnd {
-        #[arg(value_parser = |arg0: &str| parse_date(arg0.to_string()))]
+        #[arg(value_parser = parse_date)]
         date: NaiveDate,
-        #[arg(value_parser = |arg0: &str| parse_datetime(arg0.to_string()))]
+        #[arg(value_parser = parse_datetime)]
         end_time: NaiveDateTime,
         #[clap(short = 'b', long)]
         hadbreak: bool,
     },
     Insert {
-        #[arg(value_parser = |arg0: &str| parse_date(arg0.to_string()))]
+        #[arg(value_parser = parse_date)]
         date: NaiveDate,
-        #[arg(value_parser = |arg0: &str| parse_datetime(arg0.to_string()))]
+        #[arg(value_parser = parse_datetime)]
         start_time: NaiveDateTime,
-        #[arg(value_parser = |arg0: &str| parse_datetime(arg0.to_string()))]
+        #[arg(value_parser = parse_datetime)]
         end_time: NaiveDateTime,
         #[clap(short = 'b', long)]
         hadbreak: bool,
     },
     DeleteEntry {
-        #[arg(value_parser = |arg0: &str| parse_date(arg0.to_string()))]
+        #[arg(value_parser = parse_date)]
         date: NaiveDate,
     },
     SetBreak {
-        #[arg(value_parser = |arg0: &str| parse_date(arg0.to_string()))]
+        #[arg(value_parser = parse_date)]
         date: NaiveDate,
     },
-    Overtime,
     DeleteAll,
-    Print,
-    // TODO: Pass a filter here (e.g. time worked per month)
-    // TODO: Compute max possible worktime by counting how many days where summed up
-    TotalWorktime,
+    Summary
 }
 
 fn main() -> anyhow::Result<()> {
@@ -78,43 +84,26 @@ fn main() -> anyhow::Result<()> {
 
     let today = chrono::Local::now().date_naive();
 
-    let _success = match args.command {
-        Commands::Start => create_worktime_entry(conn, None, None, None, false),
+    match args.command {
+        Commands::Start => insert_worktime_entry(conn, None, None, None, false),
         Commands::End { hadbreak } => set_workday_finished_now(conn, today, hadbreak),
-        Commands::DeleteAll => delete_all_entries(conn),
-        Commands::Print => print_entries(conn).map(|_| true),
-        Commands::TotalWorktime => {
-            let total_duration = sum_worktimes(conn)?;
-            let seconds = total_duration.num_seconds();
-            let minutes = seconds / 60;
-            let hours = minutes / 60;
-
-            println!(
-                "Total worktime: {}h {}m {}s",
-                hours % 60,
-                minutes % 60,
-                seconds % 60
-            );
-            Ok(true)
+        Commands::StartAt { start_time } => {
+            insert_worktime_entry(conn, Some(start_time.date()), Some(start_time), None, false)
         }
-        Commands::Overtime => {
-            let total_duration = overtime(conn)?;
-            let mut negative = false;
-            let mut seconds = total_duration.num_seconds();
-            if seconds < 0 {
-                seconds *= -1;
-                negative = true;
-            }
-            let minutes = seconds / 60;
-            let hours = minutes / 60;
-
+        Commands::EndAt { end_time, hadbreak } => {
+            set_workday_finished(conn, end_time.date(), end_time, hadbreak)
+        }
+        Commands::DeleteAll => delete_all_entries(conn),
+        Commands::Summary => {
+            let worktime_summary = sum_worktimes(conn)?;
+            let overtime = worktime_summary.overtime();
+            print_entries(conn)?;
             println!(
-                "Total overtime: {}{}h {}m {}s",
-                if negative { "-" } else { "" },
-                hours % 60,
-                minutes % 60,
-                seconds % 60
+                "Total time worked: {}",
+                format_duration(&worktime_summary.total_duration)
             );
+            println!("Overtime: {}", format_duration(&overtime));
+
             Ok(true)
         }
         Commands::UpdateEnd {
@@ -129,7 +118,7 @@ fn main() -> anyhow::Result<()> {
             start_time,
             end_time,
             hadbreak,
-        } => create_worktime_entry(conn, Some(date), Some(start_time), Some(end_time), hadbreak),
+        } => insert_worktime_entry(conn, Some(date), Some(start_time), Some(end_time), hadbreak),
         Commands::SetBreak { date } => set_break(conn, date),
     }?;
 

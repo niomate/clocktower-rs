@@ -5,7 +5,7 @@ use chrono::prelude::*;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use dotenvy::dotenv;
-use models::{NewEntry, WorktimeEntry};
+use models::{EntryTable, NewEntry, WorktimeEntry};
 use tabled::Table;
 
 pub mod models;
@@ -18,7 +18,7 @@ pub fn establish_connection() -> PgConnection {
         .unwrap_or_else(|_| panic!("Error connection to {}", database_url))
 }
 
-pub fn create_worktime_entry(
+pub fn insert_worktime_entry(
     conn: &mut PgConnection,
     date: Option<NaiveDate>,
     start_time: Option<NaiveDateTime>,
@@ -42,12 +42,19 @@ pub fn create_worktime_entry(
         .map_err(|err| err.into())
 }
 
-pub fn set_workday_finished_now(
+fn generic_update(
     conn: &mut PgConnection,
     date: NaiveDate,
-    hadbreak: bool,
+    update: &models::UpdateEntry,
 ) -> Result<bool> {
-    set_workday_finished(conn, date, Local::now().naive_local(), hadbreak)
+    use self::schema::worktime_entries::dsl::{day, worktime_entries};
+
+    diesel::update(worktime_entries)
+        .filter(day.eq(date))
+        .set(update)
+        .execute(conn)
+        .map(|nrows| nrows == 1 as usize)
+        .map_err(|err| err.into())
 }
 
 pub fn set_workday_finished(
@@ -56,19 +63,23 @@ pub fn set_workday_finished(
     end_time: NaiveDateTime,
     hadbreak: bool,
 ) -> Result<bool> {
-    use self::schema::worktime_entries::dsl::{day, worktime_entries};
+    generic_update(
+        conn,
+        date,
+        &models::UpdateEntry::new()
+            .finished_at(end_time)
+            .hadbreak(hadbreak)
+            .done()
+            .into(),
+    )
+}
 
-    diesel::update(worktime_entries)
-        .filter(day.eq(date))
-        .set(
-            &models::UpdateEntry::new()
-                .finished_at(end_time)
-                .hadbreak(hadbreak)
-                .done(),
-        )
-        .execute(conn)
-        .map(|nrows| nrows == 1 as usize)
-        .map_err(|err| err.into())
+pub fn set_workday_finished_now(
+    conn: &mut PgConnection,
+    date: NaiveDate,
+    hadbreak: bool,
+) -> Result<bool> {
+    set_workday_finished(conn, date, Local::now().naive_local(), hadbreak)
 }
 
 pub fn update_start_time(
@@ -76,31 +87,55 @@ pub fn update_start_time(
     date: NaiveDate,
     start_time: NaiveDateTime,
 ) -> Result<bool> {
-    use self::schema::worktime_entries::dsl::{day, worktime_entries};
-    diesel::update(worktime_entries)
-        .filter(day.eq(date))
-        .set(&models::UpdateEntry::new().start_time(start_time).done())
-        .execute(conn)
-        .map(|nrows| nrows == 1 as usize)
-        .map_err(|err| err.into())
+    generic_update(
+        conn,
+        date,
+        &models::UpdateEntry::new()
+            .start_time(start_time)
+            .done()
+            .into(),
+    )
 }
 
 pub fn set_break(conn: &mut PgConnection, date: NaiveDate) -> Result<bool> {
-    use self::schema::worktime_entries::dsl::{day, worktime_entries};
-    diesel::update(worktime_entries)
-        .filter(day.eq(date))
-        .set(&models::UpdateEntry::new().hadbreak(true).done())
-        .execute(conn)
-        .map(|nrows| nrows == 1 as usize)
-        .map_err(|err| err.into())
+    generic_update(
+        conn,
+        date,
+        &models::UpdateEntry::new().hadbreak(true).done().into(),
+    )
 }
 
-pub fn sum_worktimes(conn: &mut PgConnection) -> Result<chrono::Duration> {
+pub struct WorktimeSummary {
+    num_workdays: u16,
+    pub total_duration: chrono::Duration,
+}
+
+pub fn format_duration(duration: &chrono::Duration) -> String {
+    let seconds = duration.num_seconds();
+    let minutes = seconds / 60;
+    let hours = minutes / 60;
+
+    if seconds < 0 {
+        format!("-{}h {:02}m", -hours % 60, -minutes % 60)
+    } else {
+        format!("{}h {:02}m", hours % 60, minutes % 60)
+    }
+}
+
+impl WorktimeSummary {
+    pub fn overtime(&self) -> chrono::Duration {
+        self.total_duration - chrono::Duration::hours(8 * self.num_workdays as i64)
+    }
+}
+
+pub fn sum_worktimes(conn: &mut PgConnection) -> Result<WorktimeSummary> {
     use self::schema::worktime_entries::dsl::{finished, worktime_entries};
-    Ok(worktime_entries
+    let entries = worktime_entries
         .filter(finished.eq(true))
         .select(WorktimeEntry::as_select())
-        .load(conn)?
+        .load(conn)?;
+
+    let total_duration = entries
         .iter()
         .filter_map(|entry| {
             entry.end_time.map(|et| {
@@ -112,26 +147,14 @@ pub fn sum_worktimes(conn: &mut PgConnection) -> Result<chrono::Duration> {
                 }
             })
         })
-        .sum::<chrono::Duration>())
-}
+        .sum::<chrono::Duration>();
 
-pub fn overtime(conn: &mut PgConnection) -> Result<chrono::Duration> {
-    use self::schema::worktime_entries::dsl::{finished, worktime_entries};
-    Ok(worktime_entries
-        .filter(finished.eq(true))
-        .select(WorktimeEntry::as_select())
-        .load(conn)?
-        .iter()
-        .filter_map(|entry| {
-            entry.end_time.map(|et| {
-                let mut duration = et - entry.start_time;
-                if entry.hadbreak {
-                    duration -= chrono::Duration::minutes(30)
-                }
-                duration - chrono::Duration::hours(8)
-            })
-        })
-        .sum::<chrono::Duration>())
+    let num_workdays = entries.iter().count() as u16;
+
+    Ok(WorktimeSummary {
+        num_workdays,
+        total_duration,
+    })
 }
 
 pub fn delete_all_entries(conn: &mut PgConnection) -> Result<bool> {
@@ -152,10 +175,19 @@ pub fn delete_entry(conn: &mut PgConnection, date: NaiveDate) -> Result<bool> {
 
 pub fn print_entries(conn: &mut PgConnection) -> Result<()> {
     use self::schema::worktime_entries::dsl::worktime_entries;
-    let results = worktime_entries
+    let results: Vec<EntryTable> = worktime_entries
         .select(WorktimeEntry::as_select())
         .load(conn)
-        .expect("Error loading worktime entries");
+        .expect("Error loading worktime entries")
+        .iter()
+        .map(|entry| EntryTable {
+            day: entry.day,
+            start_time: entry.start_time,
+            end_time: entry.end_time,
+            duration: entry.end_time.map(|e| e - entry.start_time),
+            hadbreak: entry.hadbreak,
+        })
+        .collect();
 
     Ok(println!("{}", Table::new(results).to_string()))
 }
