@@ -74,13 +74,13 @@ enum Commands {
         date: NaiveDate,
     },
     DeleteAll,
-    Summary
+    Summary,
 }
 
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    let conn = &mut establish_connection();
+    let conn = &mut establish_connection()?;
 
     let today = chrono::Local::now().date_naive();
 

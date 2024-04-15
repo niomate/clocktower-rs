@@ -11,11 +11,11 @@ use tabled::Table;
 pub mod models;
 pub mod schema;
 
-pub fn establish_connection() -> PgConnection {
+pub fn establish_connection() -> Result<PgConnection> {
     dotenv().ok();
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     PgConnection::establish(&database_url)
-        .unwrap_or_else(|_| panic!("Error connection to {}", database_url))
+        .map_err(|err| err.into())
 }
 
 pub fn insert_worktime_entry(
