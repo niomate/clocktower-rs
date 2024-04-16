@@ -6,7 +6,7 @@ use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use dotenvy::dotenv;
 use models::{EntryTable, NewEntry, WorktimeEntry};
-use tabled::Table;
+use tabled::{Table, settings::Style};
 
 pub mod models;
 pub mod schema;
@@ -189,5 +189,5 @@ pub fn print_entries(conn: &mut PgConnection) -> Result<()> {
         })
         .collect();
 
-    Ok(println!("{}", Table::new(results).to_string()))
+    Ok(println!("{}", Table::new(results).with(Style::modern()).to_string()))
 }
