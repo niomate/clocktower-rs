@@ -1,37 +1,5 @@
 use chrono::prelude::*;
 use diesel::prelude::*;
-use tabled::Tabled;
-use crate::format_duration;
-
-fn display_datetime_option(o: &Option<NaiveDateTime>) -> String {
-    match o {
-        Some(s) => display_datetime(s),
-        None => format!("--:--"),
-    }
-}
-
-fn display_duration_option(o: &Option<chrono::Duration>) -> String {
-    match o {
-        Some(s) => format_duration(s),
-        None => format!("--:--"),
-    }
-}
-
-fn display_datetime(s: &NaiveDateTime) -> String {
-    format!("{}", s.format("%H:%Mh"))
-}
-
-#[derive(Tabled)]
-pub struct EntryTable {
-    pub day: NaiveDate,
-    #[tabled(display_with = "display_datetime")]
-    pub start_time: NaiveDateTime,
-    #[tabled(display_with = "display_datetime_option")]
-    pub end_time: Option<NaiveDateTime>,
-    #[tabled(display_with = "display_duration_option")]
-    pub duration: Option<chrono::Duration>,
-    pub hadbreak: bool,
-}
 
 #[derive(Queryable, Selectable, Debug)]
 #[diesel(table_name = crate::schema::worktime_entries)]

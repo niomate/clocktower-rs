@@ -1,6 +1,19 @@
 use chrono::{NaiveDate, NaiveDateTime};
 use clap::{Parser, Subcommand};
 use clocktower_core::*;
+use tabled::{settings::Style, Table, Tabled};
+
+pub fn format_duration(duration: &chrono::Duration) -> String {
+    let seconds = duration.num_seconds();
+    let minutes = seconds / 60;
+    let hours = minutes / 60;
+
+    if seconds < 0 {
+        format!("-{}h {:02}m", -hours % 60, -minutes % 60)
+    } else {
+        format!("{}h {:02}m", hours % 60, minutes % 60)
+    }
+}
 
 fn parse_date(date_string: &str) -> anyhow::Result<NaiveDate> {
     parse_datetime(date_string).map(|date| date.date())
@@ -14,6 +27,36 @@ fn parse_datetime(date_string: &str) -> anyhow::Result<NaiveDateTime> {
     )
     .map(|date| date.naive_local())
     .map_err(|err| err.into())
+}
+
+fn display_datetime_option(o: &Option<NaiveDateTime>) -> String {
+    match o {
+        Some(s) => display_datetime(s),
+        None => format!("--:--"),
+    }
+}
+
+fn display_duration_option(o: &Option<chrono::Duration>) -> String {
+    match o {
+        Some(s) => format_duration(s),
+        None => format!("--:--"),
+    }
+}
+
+fn display_datetime(s: &NaiveDateTime) -> String {
+    format!("{}", s.format("%H:%Mh"))
+}
+
+#[derive(Tabled)]
+pub struct EntryTable {
+    pub day: NaiveDate,
+    #[tabled(display_with = "display_datetime")]
+    pub start_time: NaiveDateTime,
+    #[tabled(display_with = "display_datetime_option")]
+    pub end_time: Option<NaiveDateTime>,
+    #[tabled(display_with = "display_duration_option")]
+    pub duration: Option<chrono::Duration>,
+    pub hadbreak: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -97,7 +140,19 @@ fn main() -> anyhow::Result<()> {
         Commands::Summary => {
             let worktime_summary = sum_worktimes(conn)?;
             let overtime = worktime_summary.overtime();
-            print_entries(conn)?;
+            let entries = get_all_entries(conn)?
+                .iter()
+                .map(|entry| EntryTable {
+                    day: entry.day,
+                    start_time: entry.start_time,
+                    end_time: entry.end_time,
+                    duration: entry.end_time.map(|e| e - entry.start_time),
+                    hadbreak: entry.hadbreak,
+                })
+                .collect::<Vec<_>>();
+
+            println!("{}", Table::new(entries).with(Style::modern()).to_string());
+
             println!(
                 "Total time worked: {}",
                 format_duration(&worktime_summary.total_duration)

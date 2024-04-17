@@ -5,8 +5,7 @@ use chrono::prelude::*;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use dotenvy::dotenv;
-use models::{EntryTable, NewEntry, WorktimeEntry};
-use tabled::{Table, settings::Style};
+use models::{NewEntry, WorktimeEntry};
 
 pub mod models;
 pub mod schema;
@@ -14,8 +13,7 @@ pub mod schema;
 pub fn establish_connection() -> Result<PgConnection> {
     dotenv().ok();
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    PgConnection::establish(&database_url)
-        .map_err(|err| err.into())
+    PgConnection::establish(&database_url).map_err(|err| err.into())
 }
 
 pub fn insert_worktime_entry(
@@ -110,18 +108,6 @@ pub struct WorktimeSummary {
     pub total_duration: chrono::Duration,
 }
 
-pub fn format_duration(duration: &chrono::Duration) -> String {
-    let seconds = duration.num_seconds();
-    let minutes = seconds / 60;
-    let hours = minutes / 60;
-
-    if seconds < 0 {
-        format!("-{}h {:02}m", -hours % 60, -minutes % 60)
-    } else {
-        format!("{}h {:02}m", hours % 60, minutes % 60)
-    }
-}
-
 impl WorktimeSummary {
     pub fn overtime(&self) -> chrono::Duration {
         self.total_duration - chrono::Duration::hours(8 * self.num_workdays as i64)
@@ -173,21 +159,10 @@ pub fn delete_entry(conn: &mut PgConnection, date: NaiveDate) -> Result<bool> {
         .map_err(|err| err.into())
 }
 
-pub fn print_entries(conn: &mut PgConnection) -> Result<()> {
+pub fn get_all_entries(conn: &mut PgConnection) -> Result<Vec<WorktimeEntry>> {
     use self::schema::worktime_entries::dsl::worktime_entries;
-    let results: Vec<EntryTable> = worktime_entries
+    worktime_entries
         .select(WorktimeEntry::as_select())
         .load(conn)
-        .expect("Error loading worktime entries")
-        .iter()
-        .map(|entry| EntryTable {
-            day: entry.day,
-            start_time: entry.start_time,
-            end_time: entry.end_time,
-            duration: entry.end_time.map(|e| e - entry.start_time),
-            hadbreak: entry.hadbreak,
-        })
-        .collect();
-
-    Ok(println!("{}", Table::new(results).with(Style::modern()).to_string()))
+        .map_err(|err| err.into())
 }
