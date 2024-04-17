@@ -9,9 +9,9 @@ pub fn format_duration(duration: &chrono::Duration) -> String {
     let hours = minutes / 60;
 
     if seconds < 0 {
-        format!("-{}h {:02}m", -hours % 60, -minutes % 60)
+        format!("-{}h {:02}m", -hours, -minutes % 60)
     } else {
-        format!("{}h {:02}m", hours % 60, minutes % 60)
+        format!("{}h {:02}m", hours, minutes % 60)
     }
 }
 
@@ -145,6 +145,7 @@ fn main() -> anyhow::Result<()> {
         Commands::Summary => {
             let worktime_summary = sum_worktimes(conn)?;
             let overtime = worktime_summary.overtime();
+
             let mut entries = get_all_entries(conn)?
                 .iter()
                 .map(|entry| EntryTable {
