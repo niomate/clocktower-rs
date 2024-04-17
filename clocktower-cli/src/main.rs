@@ -43,12 +43,17 @@ fn display_duration_option(o: &Option<chrono::Duration>) -> String {
     }
 }
 
+fn display_weekday(s: &NaiveDate) -> String {
+    format!("{}", s.format("%a, %v"))
+}
+
 fn display_datetime(s: &NaiveDateTime) -> String {
     format!("{}", s.format("%H:%Mh"))
 }
 
 #[derive(Tabled)]
 pub struct EntryTable {
+    #[tabled(display_with = "display_weekday")]
     pub day: NaiveDate,
     #[tabled(display_with = "display_datetime")]
     pub start_time: NaiveDateTime,
@@ -140,7 +145,7 @@ fn main() -> anyhow::Result<()> {
         Commands::Summary => {
             let worktime_summary = sum_worktimes(conn)?;
             let overtime = worktime_summary.overtime();
-            let entries = get_all_entries(conn)?
+            let mut entries = get_all_entries(conn)?
                 .iter()
                 .map(|entry| EntryTable {
                     day: entry.day,
@@ -150,6 +155,8 @@ fn main() -> anyhow::Result<()> {
                     hadbreak: entry.hadbreak,
                 })
                 .collect::<Vec<_>>();
+
+            entries.sort_by_key(|entry| entry.day);
 
             println!("{}", Table::new(entries).with(Style::modern()).to_string());
 
