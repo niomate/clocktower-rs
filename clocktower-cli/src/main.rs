@@ -159,7 +159,7 @@ fn main() -> anyhow::Result<()> {
 
             entries.sort_by_key(|entry| entry.day);
 
-            entries = entries.into_iter().take(5).collect();
+            entries = entries.into_iter().rev().take(5).rev().collect();
 
             println!("{}", Table::new(entries).with(Style::modern()).to_string());
 
